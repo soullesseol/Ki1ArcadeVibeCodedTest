@@ -75,6 +75,13 @@ struct Bus {
     uint32_t irq_lines() const { return (in_vblank() ? 1u : 0u) | (ide.irq_out() ? 2u : 0u); }
     bool in_vblank() const;
     double frame_clock() const; // video frames since start (fraction = beam position)
+    double seconds() const;     // the clock frame_clock runs on
+    // Frame pacing (kinst.ini frame_pacing = display): the presenter reports each display refresh it
+    // locks the game to. While reports keep coming, frames follow them (VBLANK = the last 8% before
+    // the refresh, so every game frame is shown exactly once); otherwise the board's 58.96Hz.
+    struct Vsync { double t = -1, period = 0; int64_t n = 0; };
+    std::atomic<Vsync> vsync{};
+    void display_vsync(double t, double period) { vsync = Vsync{t, period, vsync.load().n + 1}; }
     int64_t flip_frame = -1;    // frame in which the game last flipped the framebuffer
 
     // Returns host pointer for RAM/ROM, nullptr for IO or unmapped.

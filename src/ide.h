@@ -41,9 +41,11 @@ private:
 
     std::ifstream img;
     uint32_t total_sectors = 0;
-    // ponytail: sector writes live in memory only and are lost on exit; persist to a sidecar
-    // file when audits/high scores need to survive restarts.
+    // Sectors the game wrote (operator settings, audits, high scores). They persist in
+    // <image>.changes, a log of (lba, 512 bytes) records: replayed and compacted by open(), appended
+    // on every write. The image stays as installed; deleting the log restores factory settings.
     std::unordered_map<uint32_t, std::array<uint8_t, 512>> written;
+    std::ofstream changes;
 
     int heads = 0, spt = 0;          // current logical geometry (SET_CONFIG changes it)
     uint16_t identify[256]{};

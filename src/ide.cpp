@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 
 namespace ki {
 
@@ -24,6 +25,28 @@ bool Ide::open(const std::string& path) {
     heads = HEADS;
     spt = SPT;
     total_sectors = uint32_t(BYTES / 512);
+
+    // Replay the change log (a torn last record is dropped), rewrite it compacted via a temp file so a
+    // crash mid-rewrite can't lose it, then keep appending to it.
+    const std::string log = path + ".changes", tmp = log + ".tmp";
+    written.clear();
+    if (std::ifstream in(log, std::ios::binary); in) {
+        uint32_t l = 0;
+        std::array<uint8_t, 512> s;
+        while (in.read(reinterpret_cast<char*>(&l), 4) && in.read(reinterpret_cast<char*>(s.data()), 512))
+            if (l < total_sectors) written[l] = s;
+    }
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        for (auto& [l, s] : written) {
+            out.write(reinterpret_cast<const char*>(&l), 4);
+            out.write(reinterpret_cast<const char*>(s.data()), 512);
+        }
+    }
+    std::error_code ec;
+    std::filesystem::rename(tmp, log, ec);
+    if (ec) std::fprintf(stderr, "can't update %s: %s\n", log.c_str(), ec.message().c_str());
+    changes.open(log, std::ios::binary | std::ios::app);
 
     // ide_build_identify_device(), with the model/serial patch from kinst_state::machine_reset()
     identify[0] = 0x045a;
@@ -115,7 +138,12 @@ void Ide::write(int reg, uint32_t v) {
         buf[pos] = uint8_t(v); buf[pos + 1] = uint8_t(v >> 8);
         if ((pos += 2) == 512) {
             uint32_t l = lba();
-            if (l < total_sectors) std::memcpy(written[l].data(), buf, 512);
+            if (l < total_sectors) {
+                std::memcpy(written[l].data(), buf, 512);
+                changes.write(reinterpret_cast<const char*>(&l), 4);
+                changes.write(reinterpret_cast<const char*>(buf), 512);
+                changes.flush();
+            }
             finish_irq();
             pos = 0;
             if (--remaining > 0) next_sector();

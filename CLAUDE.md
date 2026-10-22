@@ -1,5 +1,7 @@
 # Project Plan: Killer Instinct Arcade Hybrid Static Recompiler
 
+Git repository (branch `main`). Not committed (`.gitignore`): `build*/`, `ki-rom/` (copyrighted ROMs), `mame-reference/`, `n64-recomp-reference/`, game data, dumps, `kinst.ini`.
+
 ## 1. Explicit Goal
 The objective of this project is to build a native PC port (`.exe`) of the original *Killer Instinct* arcade version (Rare/Midway, 1994). This is **not** Wolf Unit hardware (`midwunit.cpp` is the TMS34010-based MK3/UMK3 board); KI runs on its own board driven by `mame-reference/src/mame/rare/kinst.cpp`.
 
@@ -69,7 +71,7 @@ To streamline development, we are targeting a **Hybrid Port Architecture**. You 
 * The "boot program" in u98 **is the game engine** (824 functions); the CHD holds assets only. Attract mode (title, character bios) runs fully recompiled.
 * Control-flow quirks handled: branch in delay slot, `jr $aN` returns (saved ra), non-local `jr` to an ancestor's return address (`Unwind`), pointer harvesting for dispatch tables, in-function `switch` for computed jumps into unrolled loops.
 * TLB: the sprite renderer reads each character's palette through a TLB mapping at virtual 0 (`lh rX, 0(pixel byte)`, 0x88010b94; mapped by `tlbwi` in 0x8800b044). `Bus::translate` applies `tlbwi` entries to kuseg/kseg2 data accesses; without it fighters render dark blue/green.
-* Hardware for Phase 2: IDE drive over the CHD (`src/ide.cpp`, libchdr; writes kept in memory), live COP0 Cause (VBLANK = IP2, IDE = IP3) and Count (50MHz) from wall-clock time.
+* Hardware for Phase 2: IDE drive over the CHD (`src/ide.cpp`, libchdr; writes persist in `data/disk.img.changes`, see below), live COP0 Cause (VBLANK = IP2, IDE = IP3) and Count (50MHz) from wall-clock time.
 * Debugging: `KI_HEADLESS=<sec>` runs without a window and dumps RAM + registers; `KI_IDE_TRACE=1` logs drive commands; crashes print the last 64 functions entered.
 * Tests: `memmap` (bus + unaligned LE helpers) and `boot_smoke` (20s headless boot must stay in recompiled code).
 
@@ -94,6 +96,7 @@ To streamline development, we are targeting a **Hybrid Port Architecture**. You 
   * Debug: `KI_DCS_TRACE=1` (resets, reboots, host bytes, autobuffer), `KI_DCS_TRACE_RANGE=lo-hi` (per-instruction register trace), `KI_WAV=file.wav` (headless audio capture).
   * Levels verified against MAME 0.120 `-wavwrite` (`D:\Disco160_B\mame + KI`): attract music really is quiet (rms ~300, peaks ~1000), same as ours.
   * Known: occasionally the first seconds of attract audio are silent (timing-dependent around DSP startup); everything after recovers.
+* Drive writes (operator settings, audits, high scores; the game writes sectors 12-18) persist in `<data>/disk.img.changes`: a log of (lba u32, 512 bytes) records, replayed and compacted (temp file + rename) by `Ide::open`, appended + flushed on every sector write. `disk.img` stays as installed; delete the log for factory settings. `--install` doesn't touch it. Test: `ide`.
 * Debug: `KI_SHOTS=1` (headless) dumps the displayed picture to `fb_NNN.bin` once a second (320x240 BGR555, 432x240 with widescreen); `KI_INPUT` port 3 = VOLUME port.
 
 ### Phase 4: Native renderer (in progress)
@@ -101,6 +104,8 @@ To streamline development, we are targeting a **Hybrid Port Architecture**. You 
   * `opengl` (`src/NativeRenderer.*`): SDL2 + OpenGL 3.3 core (Windows, Linux, Steam Deck); GL entry points via `SDL_GL_GetProcAddress`, no opengl32/libGL link. Uploads BGR555 as `GL_RGBA`/`UNSIGNED_SHORT_1_5_5_5_REV` (bit 15 ignored), letterboxed 4:3, nearest.
   * `sdl` (`src/SdlRenderer.*`): the original SDL_Renderer XBGR1555 streaming-texture blit.
   * Test `renderer`: GL pixel readback, then every registered renderer must init and draw in a hidden window.
+* Fullscreen: `kinst.ini` `fullscreen = on`, Alt+Enter / F11 toggle (desktop fullscreen, cursor hidden).
+* Frame pacing (`frame_pacing = display`, default; `original` = board clock): the presenter measures its swap interval; if it (or every k-th) is 55-62Hz it reports each refresh with `Bus::display_vsync`, and `Bus::frame_clock` then counts those refreshes (VBLANK = last 8% before each), so each game frame is shown exactly once. Reports older than 100ms (window dragged, no vsync, headless) fall back to wall clock x 58.96Hz. Measured in a fight at 60Hz: 0 repeated frames vs ~1/s with `original`. Game runs 60/58.96 = 1.7% fast.
 * Window title shows the renderer in use (`Killer Instinct [opengl]`). `kinst.ini` `show_fps = on|off|1|0`: yellow game-FPS counter, top right (3x5 font `stamp_text` in `Renderer.cpp`, stamped into a copy of the frame so every renderer shows it). It counts framebuffer flips (`Bus::flips`), not host refreshes; headless runs print `video: N frames`.
 * Effects: `kinst.ini` `fx = none|sharp|scanlines|crt|FILE.glsl` (or `--fx`), F9 cycles presets, title shows it (`[opengl, crt]`). `Renderer::set_fx`/`fx_presets` (base accepts only `none`). In `NativeRenderer.cpp`: each effect is a single-pass fragment shader with `FX_HEADER` prepended (`uv`, `layer` bilinear, `source_size`, `output_size`, `pixel()` nearest); a failed compile keeps the previous effect and reports the GLSL log. Multi-pass (xBR etc.) would need render-to-texture. `renderer` test compiles every preset, runs and rejects a `.glsl`.
 * Widescreen (`kinst.ini` `widescreen = on`, or `--widescreen`; default off): 432x240 (~16:9, M = 56 margin columns each side). Real extra picture on the **3D stages** (Cinder, Orchid's rooftop, ... incl. the round fly-in); pre-rendered stages, menus and attract stay 4:3 with black bars. Off = the original code path (every patch is `if (widescreen) alt else original`).

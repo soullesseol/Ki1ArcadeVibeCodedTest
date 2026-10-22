@@ -10,9 +10,16 @@ namespace ki {
 
 // ponytail: derived from wall-clock time; switch to a guest-cycle clock if the game's speed
 // needs to be decoupled from the host (fast-forward, frame stepping).
-double Bus::frame_clock() const {
+double Bus::seconds() const {
     static const auto t0 = std::chrono::steady_clock::now();
-    return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() * VBLANK_HZ;
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+}
+
+double Bus::frame_clock() const {
+    double now = seconds();
+    Vsync v = vsync.load();
+    if (now - v.t < 0.1) return double(v.n) + (now - v.t) / v.period;
+    return now * VBLANK_HZ;
 }
 
 // VBLANK is asserted for lines 240-260 of each 261-line frame (screen.set_raw in kinst.cpp).

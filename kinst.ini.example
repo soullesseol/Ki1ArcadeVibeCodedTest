@@ -3,6 +3,12 @@
 
 # Video: opengl (native renderer) or sdl (original blit). `kinst --list-renderers` lists them.
 renderer = opengl
+# Start fullscreen: on/off/1/0. Alt+Enter or F11 toggles it while playing.
+fullscreen = off
+# display (default): lock the game to the monitor refresh when it is close to the board's 58.96Hz
+# (60Hz, or every 2nd refresh at 120Hz) so motion is perfectly smooth; the game runs ~1.7% faster.
+# original: exact arcade speed, one repeated frame about every second on a 60Hz monitor.
+frame_pacing = display
 # Game frames per second in the top right corner: on/off/1/0.
 show_fps = off
 # Widescreen (~16:9, 432x240) without stretching: on/off/1/0. The 3D stages (e.g. Cinder's,

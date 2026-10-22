@@ -309,6 +309,9 @@ int main(int argc, char** argv) {
     if (std::string f = cfg.count("widescreen_fill") ? cfg["widescreen_fill"] : "black"; f == "mirror") ws_fill = MarginFill::Mirror;
     else if (f == "blur") ws_fill = MarginFill::Blur;
     else if (f != "black") std::fprintf(stderr, "kinst.ini widescreen_fill: unknown '%s' (black, mirror, blur)\n", f.c_str());
+    auto cfg_on = [&](const char* k) { return cfg.count(k) && (cfg[k] == "1" || cfg[k] == "on" || cfg[k] == "true"); };
+    bool fullscreen = cfg_on("fullscreen");                  // Alt+Enter / F11 toggle it while playing
+    const bool pace_display = !cfg.count("frame_pacing") || cfg["frame_pacing"] != "original";
     const bool show_fps = cfg.count("show_fps") && (cfg["show_fps"] == "1" || cfg["show_fps"] == "on" || cfg["show_fps"] == "true");
     std::vector<std::string> sources;
     enum { PLAY, INSTALL, CHECK } mode = PLAY;
@@ -432,6 +435,12 @@ int main(int argc, char** argv) {
         SDL_SetWindowTitle(video->window(), t.c_str());
     };
     apply_fx(fx);
+    auto set_fullscreen = [&](bool on) {
+        fullscreen = on;
+        SDL_SetWindowFullscreen(video->window(), on ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+        SDL_ShowCursor(on ? SDL_DISABLE : SDL_ENABLE);
+    };
+    if (fullscreen) set_fullscreen(true);
 
     // DCS output: mono 16-bit at the board's rate (31.25kHz); SDL resamples to the device.
     if (bus.dcs) {
@@ -451,9 +460,16 @@ int main(int argc, char** argv) {
     std::string fps_text;
     uint32_t fps_flips = bus.flips;
     auto fps_t0 = std::chrono::steady_clock::now();
+    // frame_pacing = display (default): lock game frames to the display refresh when it is close to
+    // the board's 58.96Hz (or a multiple: every k-th refresh), so no frame is shown twice.
+    double last_swap = bus.seconds(), swap_period = 1 / 60.0;
+    uint64_t swaps = 0;
     for (bool running = true; running;) {
         for (SDL_Event e; SDL_PollEvent(&e);) {
             if (e.type == SDL_QUIT || (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)) running = false;
+            if (e.type == SDL_KEYDOWN && !e.key.repeat &&
+                (e.key.keysym.sym == SDLK_F11 || (e.key.keysym.sym == SDLK_RETURN && (e.key.keysym.mod & KMOD_ALT))))
+                set_fullscreen(!fullscreen);
             if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F9 && !e.key.repeat && !presets.empty()) {
                 auto it = std::find(presets.begin(), presets.end(), fx);
                 apply_fx((it == presets.end() || it + 1 == presets.end()) ? presets[0] : *(it + 1));
@@ -479,6 +495,14 @@ int main(int argc, char** argv) {
                        frame.width - 3 - text_width(fps_text), 3, fps_text, 0x03ff); // BGR555 yellow
         }
         video->draw(frame);
+        if (pace_display) { // draw() returns right after the refresh it presented on (vsync)
+            double now = bus.seconds(), dt = now - last_swap;
+            last_swap = now;
+            if (dt > 0.002 && dt < 0.05) swap_period += (dt - swap_period) * 0.05;
+            int k = std::max(1, int(std::lround(1 / ki::VBLANK_HZ / swap_period)));
+            double period = swap_period * k;
+            if (period > 1 / 62.0 && period < 1 / 55.0 && ++swaps % k == 0) bus.display_vsync(now, period);
+        }
     }
 
     dump_state();

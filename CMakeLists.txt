@@ -96,6 +96,11 @@ add_executable(memmap_test tests/memmap_test.cpp)
 target_link_libraries(memmap_test PRIVATE kicore)
 add_test(NAME memmap COMMAND memmap_test)
 
+# Drive writes (settings, audits, high scores) persist in <image>.changes across runs.
+add_executable(ide_test tests/ide_test.cpp)
+target_link_libraries(ide_test PRIVATE kicore)
+add_test(NAME ide COMMAND ide_test WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+
 # First-run install from the user's ROM set (kinst.zip contents + kinst.chd in ki-rom/), then boot
 # from the generated data headless, insert two coins, press start and play into the first match
 # (KI_INPUT = ms:port:hexbits): must never leave recompiled MIPS or DSP code, and the DCS must
