@@ -1,0 +1,75 @@
+# Killer Instinct settings. Copy to kinst.ini next to kinst.exe. Every line is optional;
+# `kinst --list-controls` prints the bindings in effect in this same format.
+
+# Video: opengl (native renderer) or sdl (original blit). `kinst --list-renderers` lists them.
+renderer = opengl
+# Game frames per second in the top right corner: on/off/1/0.
+show_fps = off
+# Widescreen (~16:9, 432x240) without stretching: on/off/1/0. The 3D stages (e.g. Cinder's,
+# Orchid's rooftop) really show more of the stage on both sides; pre-rendered stages, menus and
+# attract mode stay 4:3 with black bars.
+widescreen = off
+# What fills the bars beside 4:3 screens in widescreen: black, blur (blurred, dimmed copy of the
+# picture's edges) or mirror (edges reflected and dimmed; the HUD gets reflected too).
+widescreen_fill = black
+# Screen effect (opengl only): none, sharp (crisp pixels at any window size), scanlines, crt,
+# or a .glsl file (relative = next to kinst.exe). F9 cycles the presets while playing.
+# A .glsl file is a fragment shader body without #version; it gets:
+#   in vec2 uv;                (0..1 over the picture, 0,0 = top-left)
+#   uniform sampler2D layer;   (the game picture, bilinear)
+#   uniform vec2 source_size;  (320x240, 432x240 widescreen)    uniform vec2 output_size;  (viewport)
+#   out vec4 color;            vec3 pixel(vec2 uv)  (nearest-pixel lookup)
+# e.g.  void main() { color = vec4(pixel(uv) * vec3(1.0, 0.9, 0.8), 1.0); }
+fx = none
+
+# ---- Button mapping ----
+# Actions: up down left right high_quick high_medium high_fierce low_quick low_medium low_fierce
+#          start coin test (test = service menu, P1 only)
+# Keyboard, per player: p1_<action> / p2_<action> = SDL key names, e.g. Q, Up, Keypad 8,
+#   Left Shift, Space, Return. Several keys: comma-separated. `none` unbinds.
+# Controllers: pad_<action> sets both pads; p1_pad_<action> / p2_pad_<action> set one pad
+#   (applied after pad_, so each controller can differ). Inputs: a b x y back start guide leftshoulder rightshoulder
+#   lefttrigger righttrigger leftstick rightstick dpup dpdown dpleft dpright touchpad misc1
+#   Xbox names:        A B X Y, lb rb lt rt, ls rs, view menu xbox
+#   PlayStation names: cross circle square triangle, l1 r1 l2 r2, l3 r3, create options ps
+#   (positions are what count: a = bottom face button, b = right, x = left, y = top)
+# The left stick always moves too. Setting an action replaces its defaults (shown below).
+
+# p1_up = Up
+# p1_down = Down
+# p1_left = Left
+# p1_right = Right
+# p1_high_quick = Q
+# p1_high_medium = W
+# p1_high_fierce = E
+# p1_low_quick = A
+# p1_low_medium = S
+# p1_low_fierce = D
+# p1_start = 1
+# p1_coin = 5
+# p1_test = F2
+# p2_up = Keypad 8
+# p2_down = Keypad 2
+# p2_left = Keypad 4
+# p2_right = Keypad 6
+# p2_high_quick = Keypad 7
+# p2_high_medium = Keypad 9
+# p2_high_fierce = Keypad /
+# p2_low_quick = Keypad 1
+# p2_low_medium = Keypad 3
+# p2_low_fierce = Keypad *
+# p2_start = 2
+# p2_coin = 6
+# p1_pad_up = dpup
+# p1_pad_down = dpdown
+# p1_pad_left = dpleft
+# p1_pad_right = dpright
+# p1_pad_high_quick = x
+# p1_pad_high_medium = y
+# p1_pad_high_fierce = rightshoulder
+# p1_pad_low_quick = a
+# p1_pad_low_medium = b
+# p1_pad_low_fierce = righttrigger
+# p1_pad_start = start
+# p1_pad_coin = back
+# p2_pad_... same defaults as p1_pad_

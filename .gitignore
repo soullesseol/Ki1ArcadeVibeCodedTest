@@ -1,0 +1,13 @@
+# Build output (generated code lives in build*/gen)
+/build*/
+# The user's ROM set and the CHD: copyrighted, never committed
+/ki-rom/
+# Third-party reference trees (MAME, N64Recomp), kept locally only
+/mame-reference/
+/n64-recomp-reference/
+# Game data written by `kinst --install`, headless dumps and settings
+data/
+/*.bin
+fb_*.bin
+*.wav
+kinst.ini

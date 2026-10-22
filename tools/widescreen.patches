@@ -1,0 +1,172 @@
+# Widescreen patches for kirecomp (boot_main). Each line replaces one plain (non-branch)
+# instruction when the bus is in widescreen mode; the original still runs otherwise:
+#   <pc> word <hex>   alternative instruction word       # comment
+#   <pc> code <C++>   alternative C++ statement (no comment on this line)
+# Patched routines draw into view B (memmap.h: WS_BASE, 1024-byte rows, x = -WS_M..319+WS_M).
+
+# ---- Background layers, 3D stages (0x8801854c: layer list at [0x8808de3c]) ----
+# Panorama layer caller: source x - WS_M, fb = wide row 0.
+88018604 code c->r[4] = S32(uint32_t(c->lo) - WS_M);
+88018630 code c->r[2] = S32(ws_row0(RD<uint32_t>(c, c->r[2] + 1248)));
+# Panorama blitter 0x880189b8 (a0 src x, a1 y, a2 width, a3 rows, v1 src, v0 fb): 432 columns,
+# 1024-byte rows (dest advances 160 bytes more per row on every path).
+88018a24 word 00052a40   # sll a1,a1,9         (y*640 -> y*1024)
+88018a60 word 24c8fe54   # addiu t0,a2,-0x1ac  (wrap split when fewer than 428 px remain)
+88018a80 word 24c6fe50   # addiu a2,a2,-0x1b0  (source row skip)
+88018a88 word 240a001b   # addiu t2,zero,0x1b  (27 x 16 px per row)
+88018ae4 code c->r[3] = S32(uint32_t(c->r[3]) + uint32_t(c->r[6])); c->r[2] = S32(uint32_t(c->r[2]) + 160);
+88018b14 word 240a006c   # addiu t2,zero,0x6c  (108 x 4 px per row, split path)
+88018ba8 code c->r[5] = S32(uint32_t(c->r[5]) + uint32_t(c->r[12])); c->r[2] = S32(uint32_t(c->r[2]) + 160);
+88018bec code c->r[4] = S32(uint32_t(c->r[4]) + uint32_t(c->r[11])); c->r[2] = S32(uint32_t(c->r[2]) + 160);
+# Black above the first layer (0x88018954): a1 whole wide rows.
+88018980 word 00052180   # sll a0,a1,6         (128 dwords per row)
+88018984 code c->r[2] = S32(ws_row0(RD<uint32_t>(c, c->r[2] + 1248)));
+# Solid floor colour layer (0x880188d8): whole wide rows from y down.
+8801890c code c->r[2] = S32(ws_row0(RD<uint32_t>(c, c->r[2] + 1248)));
+88018914 word 00054240   # sll t0,a1,9
+88018924 word 24080080   # addiu t0,zero,0x80
+
+# ---- Polygon rasterizers (3D floor and stage objects, called from the BSP walk 0x88014990) ----
+# Three triangle families with 6 span routines each, entered at a/b/c points that save every
+# register and jump to a common outcode clip:
+#   A 0x88019fa0/a044/a0e8 -> 0x8801a18c, B 0x8801ade0/ae84 -> 0x8801af28,
+#   C 0x8801bbd0/bc74/bd18 -> 0x8801bdbc; and the edge line drawer 0x8801ca60.
+# In widescreen they draw in x' = x + WS_M (so their sign-test left clip lands at x = -WS_M) into
+# wide row 0 with 1024-byte rows; right limits 320 -> 432 (x' of the right margin edge).
+8801a040 after ws_raster_enter(c, {4, 6, 8});
+8801a0e4 after ws_raster_enter(c, {4, 6, 8});
+8801a188 after ws_raster_enter(c, {4, 6, 8});
+8801ae80 after ws_raster_enter(c, {4, 6, 8});
+8801af24 after ws_raster_enter(c, {4, 6, 8});
+8801bc70 after ws_raster_enter(c, {4, 6, 8});
+8801bd14 after ws_raster_enter(c, {4, 6, 8});
+8801bdb8 after ws_raster_enter(c, {4, 6, 8});
+8801cadc after ws_raster_enter(c, {4, 6});
+# Limits and strides inside them (generated: slti/addiu 0x140 0x13f 0x27f 0x27e 0x280, y<<7 of y*640).
+8801a19c word 288101b0   # slti $at, $a0, 0x140 -> 0x1b0
+8801a1dc word 28c101b0   # slti $at, $a2, 0x140 -> 0x1b0
+8801a21c word 290101b0   # slti $at, $t0, 0x140 -> 0x1b0
+8801a434 word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801a4b4 word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801a568 word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801a610 word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801a6d8 word 28c101b0   # slti $at, $a2, 0x140 -> 0x1b0
+8801a6e4 word 240601af   # addiu $a2, $zero, 0x13f -> 0x1af
+8801a6ec word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801a758 word 2941035f   # slti $at, $t2, 0x27f -> 0x35f
+8801a778 word 2961035f   # slti $at, $t3, 0x27f -> 0x35f
+8801a784 word 240b035e   # addiu $t3, $zero, 0x27e -> 0x35e
+8801a7f0 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801a848 word 2961035f   # slti $at, $t3, 0x27f -> 0x35f
+8801a868 word 2941035f   # slti $at, $t2, 0x27f -> 0x35f
+8801a874 word 240a035e   # addiu $t2, $zero, 0x27e -> 0x35e
+8801a8e0 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801a938 word 2941035f   # slti $at, $t2, 0x27f -> 0x35f
+8801a958 word 2961035f   # slti $at, $t3, 0x27f -> 0x35f
+8801a964 word 240b035e   # addiu $t3, $zero, 0x27e -> 0x35e
+8801aa14 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801aa6c word 2961035f   # slti $at, $t3, 0x27f -> 0x35f
+8801aa8c word 2941035f   # slti $at, $t2, 0x27f -> 0x35f
+8801aa98 word 240a035e   # addiu $t2, $zero, 0x27e -> 0x35e
+8801ab48 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801aba4 word 2941035f   # slti $at, $t2, 0x27f -> 0x35f
+8801abc4 word 2961035f   # slti $at, $t3, 0x27f -> 0x35f
+8801abd0 word 240b035e   # addiu $t3, $zero, 0x27e -> 0x35e
+8801ac80 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801acdc word 2961035f   # slti $at, $t3, 0x27f -> 0x35f
+8801acfc word 2941035f   # slti $at, $t2, 0x27f -> 0x35f
+8801ad08 word 240a035e   # addiu $t2, $zero, 0x27e -> 0x35e
+8801adb8 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801af38 word 288101b0   # slti $at, $a0, 0x140 -> 0x1b0
+8801af78 word 28c101b0   # slti $at, $a2, 0x140 -> 0x1b0
+8801afb8 word 290101b0   # slti $at, $t0, 0x140 -> 0x1b0
+8801b288 word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801b37c word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801b504 word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801b5b4 word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801b684 word 28c101b0   # slti $at, $a2, 0x140 -> 0x1b0
+8801b690 word 240601af   # addiu $a2, $zero, 0x13f -> 0x1af
+8801b698 word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801b704 word 29a1035f   # slti $at, $t5, 0x27f -> 0x35f
+8801b758 word 29c1035f   # slti $at, $t6, 0x27f -> 0x35f
+8801b764 word 240e035e   # addiu $t6, $zero, 0x27e -> 0x35e
+8801b7ec word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801b844 word 29c1035f   # slti $at, $t6, 0x27f -> 0x35f
+8801b86c word 29a1035f   # slti $at, $t5, 0x27f -> 0x35f
+8801b878 word 25adfca2   # addiu $t5, $t5, -0x27e -> -0x35e
+8801b894 word 240d035e   # addiu $t5, $zero, 0x27e -> 0x35e
+8801b928 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801b980 word 29a1035f   # slti $at, $t5, 0x27f -> 0x35f
+8801b9d4 word 29c1035f   # slti $at, $t6, 0x27f -> 0x35f
+8801b9e0 word 240e035e   # addiu $t6, $zero, 0x27e -> 0x35e
+8801ba68 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801bac0 word 29c1035f   # slti $at, $t6, 0x27f -> 0x35f
+8801bae8 word 29a1035f   # slti $at, $t5, 0x27f -> 0x35f
+8801baf4 word 25adfca2   # addiu $t5, $t5, -0x27e -> -0x35e
+8801bb10 word 240d035e   # addiu $t5, $zero, 0x27e -> 0x35e
+8801bba4 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801bdcc word 288101b0   # slti $at, $a0, 0x140 -> 0x1b0
+8801be0c word 28c101b0   # slti $at, $a2, 0x140 -> 0x1b0
+8801be4c word 290101b0   # slti $at, $t0, 0x140 -> 0x1b0
+8801c0bc word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801c178 word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801c2a0 word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801c34c word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801c418 word 28c1035f   # slti $at, $a2, 0x27f -> 0x35f
+8801c424 word 2406035e   # addiu $a2, $zero, 0x27e -> 0x35e
+8801c42c word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801c498 word 29a1035f   # slti $at, $t5, 0x27f -> 0x35f
+8801c4d4 word 29c1035f   # slti $at, $t6, 0x27f -> 0x35f
+8801c4e0 word 240e035e   # addiu $t6, $zero, 0x27e -> 0x35e
+8801c520 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801c578 word 29c1035f   # slti $at, $t6, 0x27f -> 0x35f
+8801c59c word 29a1035f   # slti $at, $t5, 0x27f -> 0x35f
+8801c5a8 word 25adfca2   # addiu $t5, $t5, -0x27e -> -0x35e
+8801c5bc word 240d035e   # addiu $t5, $zero, 0x27e -> 0x35e
+8801c600 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801c658 word 29a1035f   # slti $at, $t5, 0x27f -> 0x35f
+8801c694 word 29c1035f   # slti $at, $t6, 0x27f -> 0x35f
+8801c6a0 word 240e035e   # addiu $t6, $zero, 0x27e -> 0x35e
+8801c710 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801c768 word 29c1035f   # slti $at, $t6, 0x27f -> 0x35f
+8801c78c word 29a1035f   # slti $at, $t5, 0x27f -> 0x35f
+8801c798 word 25adfca2   # addiu $t5, $t5, -0x27e -> -0x35e
+8801c7ac word 240d035e   # addiu $t5, $zero, 0x27e -> 0x35e
+8801c81c word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801c878 word 29a1035f   # slti $at, $t5, 0x27f -> 0x35f
+8801c8b4 word 29c1035f   # slti $at, $t6, 0x27f -> 0x35f
+8801c8c0 word 240e035e   # addiu $t6, $zero, 0x27e -> 0x35e
+8801c930 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801c988 word 29c1035f   # slti $at, $t6, 0x27f -> 0x35f
+8801c9ac word 29a1035f   # slti $at, $t5, 0x27f -> 0x35f
+8801c9b8 word 25adfca2   # addiu $t5, $t5, -0x27e -> -0x35e
+8801c9cc word 240d035e   # addiu $t5, $zero, 0x27e -> 0x35e
+8801ca38 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801caf0 word 288101af   # slti $at, $a0, 0x13f -> 0x1af
+8801cb30 word 28c101af   # slti $at, $a2, 0x13f -> 0x1af
+8801cc44 word 240c0400   # addiu $t4, $zero, 0x280 -> 0x400
+8801cc74 word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801cd70 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801cd94 word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801cf48 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801cfc4 word 240cfc00   # addiu $t4, $zero, -0x280 -> -0x400
+8801cff4 word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801d0f4 word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+8801d118 word 0005fa40   # sll $ra, $a1, 7 -> 9 (y*1024)
+8801d2cc word 24630400   # addiu $v1, $v1, 0x280 -> 0x400
+
+# ---- Sprite blitter 0x880104e8 (fighters, stage objects, 3D-scene sprites, HUD sprites) ----
+# Full-screen-clipped calls on frames with drawn margins become wide (ws_sprite_enter); a wide
+# call starts at row y*1024 of the wide buffer's column-WS_M origin.
+880104e8 after ws_sprite_enter(c);
+88010610 code c->r[4] = ws_wide_sprite(c) ? 0x400 : 0x280;
+88010654 after if (ws_wide_sprite(c)) c->r[2] = S32(ws_origin(uint32_t(c->r[2])));
+
+# ---- Full-screen colour passes (fades, flashes, the darkening before a finisher) ----
+# They sweep the 320x240 framebuffer linearly; on frames with drawn margins they sweep the whole
+# wide buffer instead (start = wide row 0, length 240 rows of 1024 bytes).
+88001594 code if (c->bus->back_has_margins()) { c->r[2] = S32(ws_row0(uint32_t(c->r[2]))); c->r[4] = S32(uint32_t(c->r[2]) + 240 * WS_PITCH); } else c->r[4] = S32(uint32_t(c->r[2]) + uint32_t(c->r[4]));
+8800161c code if (c->bus->back_has_margins()) { c->r[2] = S32(ws_row0(uint32_t(c->r[2]))); c->r[4] = S32(uint32_t(c->r[2]) + 240 * WS_PITCH); } else c->r[4] = S32(uint32_t(c->r[2]) + uint32_t(c->r[4]));
+8801871c code if (c->bus->back_has_margins()) { c->r[2] = S32(ws_row0(uint32_t(c->r[2]))); c->r[7] = 240 * WS_PITCH / 8; } else c->r[7] = 0x4b00;
+88018684 code if (c->bus->back_has_margins()) { c->r[2] = S32(ws_row0(uint32_t(c->r[2]))); c->r[4] = 240 * WS_PITCH / 8; } else c->r[4] = 0x4b00;
+
