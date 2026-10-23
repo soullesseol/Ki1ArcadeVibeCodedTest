@@ -78,6 +78,7 @@ To streamline development, we are targeting a **Hybrid Port Architecture**. You 
 ### Install / distribution (no ROMs after first run)
 * The exe contains all recompiled code (MIPS + DSP). Game **data** comes from the user's ROM set once:
   `kinst --install <folder or files...> [--data DIR]` scans recursively (loose files and any `.zip`, matched by CRC; `.chd` by raw-data SHA1 `a37a2c5e...`), checks it's v1.4 (`u98` CRC `afedb75f`), and writes `DIR` (default `data/` next to the exe): `boot.bin` (RAM + CPU state after running the recompiled boot stub), `disk.img` (raw 131MB drive), `sound.bin` (DCS region). Prints `progress N` / `error: ...` / `done: ...` on stdout; exit 0 = success. ~4s.
+* Windows: `kinst.exe` is a GUI-subsystem app (`WIN32_EXECUTABLE`, `/ENTRY:mainCRTStartup` keeps `main`), so no console window opens. Pipes (launcher, ctest) get stdout as usual; started from a terminal without redirection it attaches to that console (the prompt returns before the output, as with any GUI exe).
 * `kinst --check [--data DIR]`: exit 0 when data is ready (for a launcher's Play button). `kinst [--data DIR]`: play; starts at `0x88000000` from `boot.bin` and never opens a ROM (verified: game code never reads the boot ROM after the stub).
 * Code: `src/install.cpp` (miniz from libchdr's deps, with `MINIZ_ARCHIVE_APIS`, reads zips). Tests: `install` fixture builds `build*/data` from `ki-rom/`, then `boot_smoke` plays from it.
 * ponytail: the service-mode ROM test (if it checksums the boot ROM) would fail, since the ROM isn't mapped at runtime.

@@ -302,6 +302,12 @@ static std::map<std::string, std::string> load_config(const std::string& path) {
 
 int main(int argc, char** argv) {
 #ifdef _WIN32
+    // The exe is a GUI app (no console window on double-click). Started from a terminal without
+    // redirection it has no stdout: print into that terminal. Pipes (launcher, ctest) work as is.
+    if (!GetStdHandle(STD_OUTPUT_HANDLE) && AttachConsole(ATTACH_PARENT_PROCESS)) {
+        std::freopen("CONOUT$", "w", stdout);
+        std::freopen("CONOUT$", "w", stderr);
+    }
     AddVectoredExceptionHandler(1, crash_handler);
 #else
     struct sigaction sa{};
