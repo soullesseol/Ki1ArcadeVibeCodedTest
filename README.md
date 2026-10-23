@@ -1,5 +1,5 @@
 # Disclaimer
-This project is full vibe coded, not a single line was/or will be writen by me (except this disclaimer, I was just writing prompts like a demon).
+This project is full vibe coded, not a single line was/or will be written by me (except this disclaimer, I was just writing prompts like a demon).
 
 It was just a test for personal reasons, so this is not intended for release, and it won't be completed. I encourage you to use [UltraCombo](https://github.com/thefixinhixon/UltraCombo) 
 
