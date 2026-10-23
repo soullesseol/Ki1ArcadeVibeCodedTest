@@ -15,6 +15,10 @@
 #include <map>
 #include <thread>
 #include "Renderer.hpp"
+#ifndef _WIN32
+#include <csignal>
+#include <signal.h>
+#endif
 #include "dcs.h"
 #include "install.h"
 #include "recomp.h"
@@ -74,6 +78,12 @@ static void dump_state() {
 // Guest thread: the boot stub already ran at install time (data/boot.bin holds the state it left),
 // so start straight at the unpacked game program.
 static void guest() {
+#ifndef _WIN32
+    static std::vector<char> alt_stack(1 << 16); // for crash_handler on a native stack overflow
+    stack_t ss{};
+    ss.ss_sp = alt_stack.data(), ss.ss_size = alt_stack.size();
+    sigaltstack(&ss, nullptr);
+#endif
     ki::register_funcs(boot_main_funcs, boot_main_count);
     // The game copies its exception vector stub from 0x88026344 to 0x80000180.
     ki::alias(0x80000180, 0x88026344);
@@ -102,6 +112,17 @@ static LONG WINAPI crash_handler(EXCEPTION_POINTERS* e) {
     std::printf("\n");
     std::fflush(stdout);
     return EXCEPTION_CONTINUE_SEARCH;
+}
+#else
+// Same report on POSIX. The guest thread gets an alternate signal stack (guest()), so a native stack
+// overflow there can still be reported.
+static void crash_handler(int sig) {
+    std::printf("crash signal %d, recent functions:", sig);
+    for (uint32_t i = 0; i < 64; i++) std::printf("%s%08x", i % 8 ? " " : "\n  ", ctx.trail[(ctx.trail_pos + i) & 63]);
+    std::printf("\n");
+    std::fflush(stdout);
+    std::signal(sig, SIG_DFL);
+    std::raise(sig);
 }
 #endif
 
@@ -282,6 +303,12 @@ static std::map<std::string, std::string> load_config(const std::string& path) {
 int main(int argc, char** argv) {
 #ifdef _WIN32
     AddVectoredExceptionHandler(1, crash_handler);
+#else
+    struct sigaction sa{};
+    sa.sa_handler = crash_handler;
+    sa.sa_flags = SA_ONSTACK;
+    sigaction(SIGSEGV, &sa, nullptr);
+    sigaction(SIGBUS, &sa, nullptr);
 #endif
     // Command line (for a launcher):
     //   kinst [--data DIR]                          play (DIR defaults to "data" next to the exe)

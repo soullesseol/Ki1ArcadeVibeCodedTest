@@ -89,6 +89,10 @@ if(MSVC)
     set_source_files_properties(${GEN}/boot_main.cpp PROPERTIES COMPILE_OPTIONS /bigobj)
 endif()
 target_link_libraries(kinst PRIVATE kicore SDL2::SDL2-static chdr-static miniz)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # Portable Linux binary: no dependency on the build machine's libstdc++/libgcc versions.
+    target_link_options(kinst PRIVATE -static-libstdc++ -static-libgcc)
+endif()
 target_include_directories(kinst PRIVATE ${libchdr_SOURCE_DIR}/deps/miniz-3.1.2)
 
 enable_testing()

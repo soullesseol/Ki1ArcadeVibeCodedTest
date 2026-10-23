@@ -17,7 +17,11 @@ double Bus::seconds() const {
 
 double Bus::frame_clock() const {
     double now = seconds();
-    Vsync v = vsync.load();
+    Vsync v;
+    {
+        std::lock_guard g(vsync_lock);
+        v = vsync;
+    }
     if (now - v.t < 0.1) return double(v.n) + (now - v.t) / v.period;
     return now * VBLANK_HZ;
 }

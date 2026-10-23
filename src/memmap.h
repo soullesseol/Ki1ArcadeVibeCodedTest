@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <vector>
 #include "ide.h"
@@ -80,8 +81,12 @@ struct Bus {
     // locks the game to. While reports keep coming, frames follow them (VBLANK = the last 8% before
     // the refresh, so every game frame is shown exactly once); otherwise the board's 58.96Hz.
     struct Vsync { double t = -1, period = 0; int64_t n = 0; };
-    std::atomic<Vsync> vsync{};
-    void display_vsync(double t, double period) { vsync = Vsync{t, period, vsync.load().n + 1}; }
+    Vsync vsync;                 // guarded by vsync_lock (a 24-byte atomic would need libatomic on Linux)
+    mutable std::mutex vsync_lock;
+    void display_vsync(double t, double period) {
+        std::lock_guard g(vsync_lock);
+        vsync = {t, period, vsync.n + 1};
+    }
     int64_t flip_frame = -1;    // frame in which the game last flipped the framebuffer
 
     // Returns host pointer for RAM/ROM, nullptr for IO or unmapped.
